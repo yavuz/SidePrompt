@@ -12,11 +12,9 @@
   <strong>Open source.</strong> MIT licensed. No account, no sync, no telemetry.
 </p>
 
-<div align="center">
-
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black.svg) ![Swift 6](https://img.shields.io/badge/Swift-6-orange.svg) ![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-
-</div>
+<p align="center">
+  <img src="docs/images/badges.png" alt="macOS 14+ · Swift 6 · MIT license" />
+</p>
 
 <p align="center">
   <img src="docs/images/screenshot.png" width="360" alt="SidePrompt floating panel" />
