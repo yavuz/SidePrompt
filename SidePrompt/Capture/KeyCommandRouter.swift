@@ -24,6 +24,7 @@ final class KeyCommandRouter {
         if keyCode == UInt16(kVK_Escape) {
             if store.editingItemID != nil {
                 store.endEditing()
+                NSApp.keyWindow?.makeFirstResponder(nil)
                 return nil
             }
             if !textFocused {

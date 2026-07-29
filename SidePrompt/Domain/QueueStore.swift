@@ -17,6 +17,7 @@ final class QueueStore {
     var editingItemID: UUID?
 
     func endEditing() {
+        guard editingItemID != nil else { return }
         editingItemID = nil
     }
 
@@ -124,13 +125,95 @@ final class QueueStore {
         save()
     }
 
-    func moveItem(_ itemId: UUID, to sectionId: UUID) {
-        guard let index = items.firstIndex(where: { $0.id == itemId }) else { return }
-        let order = (items.filter { $0.sectionId == sectionId }.map(\.order).max() ?? -1) + 1
-        items[index].sectionId = sectionId
-        items[index].order = order
-        items[index].updatedAt = Date()
+    /// Whether a section can be removed (Inbox and the last section are protected).
+    func canDeleteSection(id: UUID) -> Bool {
+        guard sections.count > 1,
+              let section = sections.first(where: { $0.id == id }) else { return false }
+        return section.title != "Inbox"
+    }
+
+    /// Deletes a section. Items are moved to Inbox. Returns moved item count, or nil if refused.
+    @discardableResult
+    func deleteSection(id: UUID) -> Int? {
+        guard canDeleteSection(id: id) else { return nil }
+        ensureInbox()
+        guard let inbox = sections.first(where: { $0.title == "Inbox" }),
+              inbox.id != id else { return nil }
+
+        let movingIDs = items.filter { $0.sectionId == id }.map(\.id)
+        if !movingIDs.isEmpty {
+            moveItems(movingIDs, to: inbox.id, before: nil)
+        }
+
+        sections.removeAll { $0.id == id }
+        for (order, section) in sortedSections.enumerated() {
+            guard let index = sections.firstIndex(where: { $0.id == section.id }) else { continue }
+            sections[index].order = order
+        }
         save()
+        return movingIDs.count
+    }
+
+    func moveItem(_ itemId: UUID, to sectionId: UUID) {
+        moveItems([itemId], to: sectionId, before: nil)
+    }
+
+    /// Moves items into `sectionId`. If `before` is set, inserts ahead of that item
+    /// (must already be in the target section, or the move appends).
+    func moveItems(_ ids: [UUID], to sectionId: UUID, before beforeId: UUID? = nil) {
+        let uniqueIDs = orderedIDs(from: ids)
+        guard !uniqueIDs.isEmpty, sections.contains(where: { $0.id == sectionId }) else { return }
+
+        let moving = uniqueIDs.compactMap { id in items.first(where: { $0.id == id }) }
+        guard !moving.isEmpty else { return }
+
+        var destination = items
+            .filter { $0.sectionId == sectionId && !uniqueIDs.contains($0.id) }
+            .sorted { $0.order < $1.order }
+
+        if let beforeId,
+           !uniqueIDs.contains(beforeId),
+           let insertAt = destination.firstIndex(where: { $0.id == beforeId }) {
+            destination.insert(contentsOf: moving, at: insertAt)
+        } else {
+            destination.append(contentsOf: moving)
+        }
+
+        let now = Date()
+        for (order, item) in destination.enumerated() {
+            guard let index = items.firstIndex(where: { $0.id == item.id }) else { continue }
+            items[index].sectionId = sectionId
+            items[index].order = order
+            items[index].updatedAt = now
+        }
+
+        // Compact orders in any section that still holds leftovers.
+        for section in sections {
+            renumber(sectionId: section.id)
+        }
+
+        selectedItemIDs = Set(uniqueIDs)
+        selectionAnchorID = uniqueIDs.first
+        editingItemID = nil
+        save()
+    }
+
+    /// Display order of the given IDs (section order, then item order).
+    func orderedIDs(from ids: [UUID]) -> [UUID] {
+        let wanted = Set(ids)
+        return displayOrderedItems()
+            .map(\.id)
+            .filter { wanted.contains($0) }
+    }
+
+    private func renumber(sectionId: UUID) {
+        let ordered = items
+            .filter { $0.sectionId == sectionId }
+            .sorted { $0.order < $1.order }
+        for (order, item) in ordered.enumerated() where item.order != order {
+            guard let index = items.firstIndex(where: { $0.id == item.id }) else { continue }
+            items[index].order = order
+        }
     }
 
     func copySelectedAsList() -> String {
