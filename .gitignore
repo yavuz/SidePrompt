@@ -1,0 +1,24 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserdata
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+
+# Swift / SPM
+.swiftpm/
+Package.resolved
+
+# Local secrets / signing
+.env
+*.p12
+*.cer
+*.mobileprovision
