@@ -1,10 +1,26 @@
+<p align="center">
+  <img src="docs/images/icon.png" width="128" alt="SidePrompt icon" />
+</p>
+
 # SidePrompt
 
-Local-first Mac scratchpad for AI-assisted work — capture selections from any app, stage prompts, copy them back when ready.
+<p align="center">
+  Local-first Mac scratchpad for AI-assisted work — capture selections from any app, stage prompts, copy them back when ready.
+</p>
 
-**Open source.** MIT licensed. No account, no sync, no telemetry.
+<p align="center">
+  <strong>Open source.</strong> MIT licensed. No account, no sync, no telemetry.
+</p>
 
-![macOS 14+](https://img.shields.io/badge/macOS-14%2B-black) ![Swift 6](https://img.shields.io/badge/Swift-6-orange) ![License MIT](https://img.shields.io/badge/license-MIT-blue)
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-14%2B-black" alt="macOS 14+" />
+  <img src="https://img.shields.io/badge/Swift-6-orange" alt="Swift 6" />
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License MIT" />
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot.png" width="360" alt="SidePrompt floating panel" />
+</p>
 
 ## Why
 
