@@ -21,13 +21,22 @@ final class HotKeyManager: @unchecked Sendable {
     private var captureGesture: ShortcutSettings.CaptureGesture = .doubleShift
     private var panelShortcut: ShortcutSettings.PanelShortcut = .commandShiftP
 
+    /// True while the tap exists and the system has not disabled it.
+    var isActive: Bool {
+        guard let eventTap else { return false }
+        return CGEvent.tapIsEnabled(tap: eventTap)
+    }
+
     @discardableResult
     func update(
         captureGesture: ShortcutSettings.CaptureGesture,
         panelShortcut: ShortcutSettings.PanelShortcut
     ) -> Bool {
+        let unchanged = self.captureGesture == captureGesture && self.panelShortcut == panelShortcut
         self.captureGesture = captureGesture
         self.panelShortcut = panelShortcut
+        // Tearing the tap down mid-capture resets double-tap state and drops events.
+        if unchanged, isActive { return true }
         return start()
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 enum ItemKind: String, Codable, CaseIterable, Identifiable {
     case note
@@ -30,6 +31,8 @@ struct PromptItem: Identifiable, Codable, Hashable {
     var id: UUID
     var sectionId: UUID
     var body: String
+    /// Lossless rich text from capture/edit when available (RTF).
+    var bodyRTF: Data?
     var kind: ItemKind
     var isDone: Bool
     var order: Int
@@ -40,6 +43,7 @@ struct PromptItem: Identifiable, Codable, Hashable {
         id: UUID = UUID(),
         sectionId: UUID,
         body: String,
+        bodyRTF: Data? = nil,
         kind: ItemKind = .note,
         isDone: Bool = false,
         order: Int,
@@ -49,6 +53,7 @@ struct PromptItem: Identifiable, Codable, Hashable {
         self.id = id
         self.sectionId = sectionId
         self.body = body
+        self.bodyRTF = bodyRTF
         self.kind = kind
         self.isDone = isDone
         self.order = order
@@ -56,11 +61,34 @@ struct PromptItem: Identifiable, Codable, Hashable {
         self.updatedAt = updatedAt
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        sectionId = try container.decode(UUID.self, forKey: .sectionId)
+        body = try container.decode(String.self, forKey: .body)
+        bodyRTF = try container.decodeIfPresent(Data.self, forKey: .bodyRTF)
+        kind = try container.decode(ItemKind.self, forKey: .kind)
+        isDone = try container.decode(Bool.self, forKey: .isDone)
+        order = try container.decode(Int.self, forKey: .order)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
     var preview: String {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "Empty" }
         if trimmed.count <= 120 { return trimmed }
         return String(trimmed.prefix(117)) + "..."
+    }
+
+    /// Preferred attributed representation for display / pasteboard.
+    var attributedBody: NSAttributedString {
+        if let bodyRTF,
+           let rich = NSAttributedString(rtf: bodyRTF, documentAttributes: nil),
+           rich.length > 0 {
+            return rich
+        }
+        return RichTextMarkdown.attributedString(fromMarkdown: body)
     }
 }
 

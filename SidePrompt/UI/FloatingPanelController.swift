@@ -4,13 +4,18 @@ import SwiftUI
 /// Detached floating panel, separate from the menu bar.
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
+    /// Lets `KeyCommandRouter` tell the queue panel apart from detail / settings windows.
+    static let panelIdentifier = NSUserInterfaceItemIdentifier("SidePrompt.QueuePanel")
+
     private var panel: NSPanel?
     private let store: QueueStore
     private let appModel: AppModel
+    private let shortcuts: ShortcutSettings
 
-    init(store: QueueStore, appModel: AppModel) {
+    init(store: QueueStore, appModel: AppModel, shortcuts: ShortcutSettings) {
         self.store = store
         self.appModel = appModel
+        self.shortcuts = shortcuts
         super.init()
     }
 
@@ -51,6 +56,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         let root = PanelRootView()
             .environment(store)
             .environment(appModel)
+            .environment(shortcuts)
 
         let hosting = NSHostingController(rootView: root)
         hosting.view.frame = NSRect(x: 0, y: 0, width: 360, height: 540)
@@ -62,6 +68,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
             defer: false
         )
         panel.contentViewController = hosting
+        panel.identifier = Self.panelIdentifier
         panel.title = "SidePrompt"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
@@ -75,7 +82,8 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false
         panel.isReleasedWhenClosed = false
-        panel.hasShadow = false
+        // Native macOS window shadow — no custom SwiftUI halo.
+        panel.hasShadow = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.minSize = NSSize(width: 300, height: 400)
@@ -100,7 +108,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     private func placeDefault(_ panel: NSPanel) {
         let size = NSSize(width: 360, height: 540)
         if let screen = NSScreen.main {
-            // Top-right, clearly below the menu bar.
             let x = screen.visibleFrame.maxX - size.width - 22
             let y = screen.visibleFrame.maxY - size.height - 18
             panel.setFrame(NSRect(origin: NSPoint(x: x, y: y), size: size), display: true)

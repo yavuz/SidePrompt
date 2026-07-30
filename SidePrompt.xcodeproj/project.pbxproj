@@ -14,12 +14,14 @@
 		3C14C4DC8CC930DB855C6B1C /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = C85A0412E6FB70A4565BDB03 /* Models.swift */; };
 		413887CFC4BB242F0FC45C46 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 944301515886FA0FAEDFBBC2 /* Assets.xcassets */; };
 		4CF1196548DD27934383C76A /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 8128627591D585636D9A3D37 /* Sparkle */; };
+		578C2C6283309178D88F92B4 /* RichTextMarkdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C542390088846D3D5BBC2D3 /* RichTextMarkdown.swift */; };
 		5826DD011542D4BB1CB95F77 /* PanelRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69B72366B259F2D49D3283A1 /* PanelRootView.swift */; };
 		5FB5C310D69932B5D740ADEF /* PasteboardService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D13811DABFE1F973CBBD20 /* PasteboardService.swift */; };
 		6A5BF38F8732F1DC70A6CEEC /* SidePromptApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C60892364F748AF5088232 /* SidePromptApp.swift */; };
 		6B8C5F3DCA47FE59B2D6682F /* ShortcutSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F16212CD2F3177A27397214 /* ShortcutSettings.swift */; };
 		6C9D578EC5BBE608B4507998 /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CD8C12A905DC273218E80D9 /* UpdateManager.swift */; };
 		74069EF218551BD2B1F4C5D2 /* QueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4115ACBEC6470E1D06CB2A /* QueueStore.swift */; };
+		A4F549DA77E0AE19AA50CA53 /* ItemDetailWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE44D4E60E9578AF4A2D749E /* ItemDetailWindow.swift */; };
 		B940DC9D380E64D16E984947 /* SelectionReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7DEF9FDF8BA6D8AC97AF01 /* SelectionReader.swift */; };
 		C0FC9B01558C2777EACEF575 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D38ADA7FA4EB9454C49CF62 /* QueueView.swift */; };
 		C34F12B7A1D3EBAF10D30CF6 /* TemplatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 999A2D0D6A576E2A86149D19 /* TemplatesView.swift */; };
@@ -32,6 +34,7 @@
 		01D13811DABFE1F973CBBD20 /* PasteboardService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardService.swift; sourceTree = "<group>"; };
 		054400FC0E83F4FEB5CBDF18 /* LocalStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalStore.swift; sourceTree = "<group>"; };
 		0A7DEF9FDF8BA6D8AC97AF01 /* SelectionReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionReader.swift; sourceTree = "<group>"; };
+		1C542390088846D3D5BBC2D3 /* RichTextMarkdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichTextMarkdown.swift; sourceTree = "<group>"; };
 		1CD8C12A905DC273218E80D9 /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
 		2C4115ACBEC6470E1D06CB2A /* QueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueStore.swift; sourceTree = "<group>"; };
 		3F16212CD2F3177A27397214 /* ShortcutSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutSettings.swift; sourceTree = "<group>"; };
@@ -49,6 +52,7 @@
 		B495E67AD146716DFC0119AB /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C85A0412E6FB70A4565BDB03 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		D333302D818EA67219B487B5 /* KeyCommandRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyCommandRouter.swift; sourceTree = "<group>"; };
+		DE44D4E60E9578AF4A2D749E /* ItemDetailWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailWindow.swift; sourceTree = "<group>"; };
 		E7B469CA64BDB42DDF3EAF2F /* WindowDragGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDragGuard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -78,6 +82,7 @@
 				937DFD52179FD812E8B04843 /* HotKeyManager.swift */,
 				D333302D818EA67219B487B5 /* KeyCommandRouter.swift */,
 				01D13811DABFE1F973CBBD20 /* PasteboardService.swift */,
+				1C542390088846D3D5BBC2D3 /* RichTextMarkdown.swift */,
 				0A7DEF9FDF8BA6D8AC97AF01 /* SelectionReader.swift */,
 			);
 			path = Capture;
@@ -118,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				3F2F64FD1559FF9B9BA84478 /* FloatingPanelController.swift */,
+				DE44D4E60E9578AF4A2D749E /* ItemDetailWindow.swift */,
 				69B72366B259F2D49D3283A1 /* PanelRootView.swift */,
 				6D38ADA7FA4EB9454C49CF62 /* QueueView.swift */,
 				999A2D0D6A576E2A86149D19 /* TemplatesView.swift */,
@@ -234,6 +240,7 @@
 				12206197EF43214C81A2F37A /* AppModel.swift in Sources */,
 				C9B0E15351A34E4765349E82 /* FloatingPanelController.swift in Sources */,
 				2F4CF4C93E07F13409B57039 /* HotKeyManager.swift in Sources */,
+				A4F549DA77E0AE19AA50CA53 /* ItemDetailWindow.swift in Sources */,
 				E374A9C6F7530C6AE52AEFD9 /* KeyCommandRouter.swift in Sources */,
 				2898B9247D3499A4D5011888 /* LocalStore.swift in Sources */,
 				3C14C4DC8CC930DB855C6B1C /* Models.swift in Sources */,
@@ -241,6 +248,7 @@
 				5FB5C310D69932B5D740ADEF /* PasteboardService.swift in Sources */,
 				74069EF218551BD2B1F4C5D2 /* QueueStore.swift in Sources */,
 				C0FC9B01558C2777EACEF575 /* QueueView.swift in Sources */,
+				578C2C6283309178D88F92B4 /* RichTextMarkdown.swift in Sources */,
 				B940DC9D380E64D16E984947 /* SelectionReader.swift in Sources */,
 				6B8C5F3DCA47FE59B2D6682F /* ShortcutSettings.swift in Sources */,
 				6A5BF38F8732F1DC70A6CEEC /* SidePromptApp.swift in Sources */,

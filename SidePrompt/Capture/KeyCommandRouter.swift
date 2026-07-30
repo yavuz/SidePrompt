@@ -14,7 +14,12 @@ final class KeyCommandRouter {
     }
 
     func handle(_ event: NSEvent) -> NSEvent? {
-        guard NSApp.keyWindow != nil else { return event }
+        // Only the queue panel. Otherwise Delete / ⌘A / Esc typed in the item detail
+        // or Settings window would act on the panel's list behind them.
+        guard let keyWindow = NSApp.keyWindow,
+              keyWindow.identifier == FloatingPanelController.panelIdentifier else {
+            return event
+        }
 
         let keyCode = event.keyCode
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
@@ -51,12 +56,13 @@ final class KeyCommandRouter {
 
         // ⌘C — copy selected
         if flags == .command, chars == "c" {
-            guard let text = store.copySelectedItems() else {
+            let selected = store.orderedSelectedItemsForCopy()
+            guard !selected.isEmpty else {
                 appModel.showToast("Select an item first")
                 return nil
             }
-            if PasteboardService.copy(text) {
-                let count = store.selectedItemIDs.count
+            if PasteboardService.copy(items: selected) {
+                let count = selected.count
                 appModel.showToast(count > 1 ? "Copied \(count) items" : "Copied")
             }
             return nil

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum DropInsertion: Equatable {
     case before(itemID: UUID, sectionID: UUID)
@@ -298,42 +299,41 @@ struct QueueView: View {
     // MARK: - List
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                ForEach(store.sortedSections) { section in
-                    sectionBlock(section)
-                }
+        // Group once per render instead of filtering + sorting per section.
+        let grouped = store.groupedItems()
 
-                // Fills leftover space so empty-area taps can dismiss the editor.
-                Color.clear
-                    .frame(maxWidth: .infinity, minHeight: 160)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        dismissEditor()
+        // The content is stretched to at least the viewport height so clicks in the
+        // empty area below the last card still land on a tap target and deselect.
+        return GeometryReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(store.sortedSections) { section in
+                        sectionBlock(section, sectionItems: grouped[section.id] ?? [])
                     }
+                }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 4)
+                .frame(
+                    maxWidth: .infinity,
+                    minHeight: proxy.size.height,
+                    alignment: .topLeading
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { dismissEditor() }
+                .animation(.snappy(duration: 0.22), value: store.layoutVersion)
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 4)
-            .animation(.snappy(duration: 0.22), value: itemLayoutSignature)
+            .scrollIndicators(.hidden)
         }
     }
 
     private func dismissEditor() {
         store.endEditing()
+        store.clearSelection()
         composerFocused = false
         NSApp.keyWindow?.makeFirstResponder(nil)
     }
 
-    private var itemLayoutSignature: String {
-        store.sortedSections.map { section in
-            let ids = store.items(in: section).map(\.id.uuidString).joined(separator: ",")
-            return "\(section.id.uuidString):\(ids)"
-        }
-        .joined(separator: "|")
-    }
-
-    private func sectionBlock(_ section: SectionModel) -> some View {
-        let sectionItems = store.items(in: section)
+    private func sectionBlock(_ section: SectionModel, sectionItems: [PromptItem]) -> some View {
         let sectionHighlighted = isSectionHighlighted(section.id)
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -530,6 +530,7 @@ struct QueueView: View {
 struct ItemRow: View {
     @Environment(QueueStore.self) private var store
     @Environment(AppModel.self) private var appModel
+    @Environment(ShortcutSettings.self) private var shortcuts
     let item: PromptItem
     var isDragPlaceholder: Bool = false
     var onDragBegan: (([UUID]) -> Void)?
@@ -547,8 +548,28 @@ struct ItemRow: View {
         return [item.id]
     }
 
-    private var dragPayload: String {
-        dragIDs.map(\.uuidString).joined(separator: ",")
+    /// What other apps receive. Reordering inside the panel reads `ListDragState`
+    /// instead, so the payload never has to carry item IDs.
+    private func makeDragProvider() -> NSItemProvider {
+        let dragged = dragIDs.compactMap { id in store.items.first(where: { $0.id == id }) }
+        let text = dragged
+            .map { $0.body.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+
+        let provider = NSItemProvider()
+        // RTF first so rich editors get formatting; plain text is the fallback.
+        if dragged.count == 1, let rtf = dragged[0].bodyRTF, !rtf.isEmpty {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: UTType.rtf.identifier,
+                visibility: .all
+            ) { completion in
+                completion(rtf, nil)
+                return nil
+            }
+        }
+        provider.registerObject(text as NSString, visibility: .all)
+        return provider
     }
 
     var body: some View {
@@ -573,7 +594,7 @@ struct ItemRow: View {
                         .focused($editorFocused)
                         .onExitCommand { commitAndClose() }
                 } else {
-                    MarkdownBody(text: item.body, isDone: item.isDone)
+                    MarkdownBody(text: item.body, isDone: item.isDone, lineLimit: 4)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -601,7 +622,9 @@ struct ItemRow: View {
         .disablesWindowDrag()
         .modifier(ItemDragPayloadModifier(
             enabled: !isEditing,
-            payload: dragPayload,
+            // Evaluated at drag time — computing it in `body` re-sorts the whole
+            // list for every row on every render while a multi-selection is active.
+            provider: { makeDragProvider() },
             onDragBegan: {
                 onDragBegan?(dragIDs)
             }
@@ -617,19 +640,23 @@ struct ItemRow: View {
             }
         }
         .contextMenu {
+            Button("Open in Window") {
+                store.endEditing()
+                appModel.onOpenItemWindow?(item.id)
+            }
             Button(isSelected ? "Deselect" : "Select") {
                 store.endEditing()
                 store.toggleSelection(id: item.id)
             }
             Button("Copy") {
-                if PasteboardService.copy(item.body) {
+                if PasteboardService.copy(item) {
                     appModel.showToast("Copied")
                 }
             }
             Button(item.isDone ? "Mark Incomplete" : "Mark Done") {
                 store.toggleDone(id: item.id)
             }
-            Button("Edit") { beginEdit() }
+            Button("Edit Inline") { beginEdit() }
             if store.selectedItemIDs.count >= 2 {
                 Button("Merge Selected") {
                     if store.mergeSelected() != nil {
@@ -647,6 +674,7 @@ struct ItemRow: View {
             Divider()
             Button("Delete", role: .destructive) {
                 store.delete(ids: [item.id])
+                ItemWindowManager.shared.close(itemID: item.id)
             }
         }
     }
@@ -671,7 +699,8 @@ struct ItemRow: View {
 
     private func handleTap() {
         // Prefer the click event’s modifiers; fall back to current flags.
-        let raw = NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags
+        let event = NSApp.currentEvent
+        let raw = event?.modifierFlags ?? NSEvent.modifierFlags
         let flags = raw.intersection(.deviceIndependentFlagsMask)
 
         if flags.contains(.command) {
@@ -685,7 +714,28 @@ struct ItemRow: View {
             return
         }
 
-        beginEdit()
+        // Double-click → configured activate action.
+        if (event?.clickCount ?? 1) >= 2 {
+            activateItem()
+            return
+        }
+
+        // Single-click → select only (so double-click can open a window cleanly).
+        store.endEditing()
+        store.selectedItemIDs = [item.id]
+        store.selectionAnchorID = item.id
+    }
+
+    private func activateItem() {
+        switch shortcuts.itemActivateAction {
+        case .inlineEdit:
+            beginEdit()
+        case .openWindow:
+            store.endEditing()
+            store.selectedItemIDs = [item.id]
+            store.selectionAnchorID = item.id
+            appModel.onOpenItemWindow?(item.id)
+        }
     }
 
     private func beginEdit() {
@@ -709,14 +759,14 @@ struct ItemRow: View {
 
 private struct ItemDragPayloadModifier: ViewModifier {
     let enabled: Bool
-    let payload: String
+    let provider: () -> NSItemProvider
     let onDragBegan: () -> Void
 
     func body(content: Content) -> some View {
         if enabled {
             content.onDrag {
                 onDragBegan()
-                return NSItemProvider(object: payload as NSString)
+                return provider()
             }
         } else {
             content
@@ -743,7 +793,8 @@ private struct ItemRowDropDelegate: DropDelegate {
     let onDrop: @MainActor ([UUID], DropInsertion) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.plainText])
+        // Only our own rows reorder the list; text dragged in from other apps is ignored.
+        dragState.isDragging
     }
 
     func dropEntered(info: DropInfo) {
@@ -771,13 +822,14 @@ private struct ItemRowDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        let ids = Array(dragState.draggingIDs)
+        guard !ids.isEmpty else {
+            dragState.clear()
+            return false
+        }
         let target = insertion(for: info)
         dragState.dropInsertion = nil
-        loadIDs(from: info) { ids in
-            Task { @MainActor in
-                onDrop(ids, target)
-            }
-        }
+        onDrop(ids, target)
         return true
     }
 
@@ -803,18 +855,6 @@ private struct ItemRowDropDelegate: DropDelegate {
         }
         return .end(sectionID: sectionID)
     }
-
-    private func loadIDs(from info: DropInfo, completion: @escaping @Sendable ([UUID]) -> Void) {
-        guard let provider = info.itemProviders(for: [.plainText]).first else {
-            completion([])
-            return
-        }
-        provider.loadObject(ofClass: NSString.self) { object, _ in
-            let text = (object as? NSString) as String? ?? ""
-            let ids = text.split(separator: ",").compactMap { UUID(uuidString: String($0)) }
-            completion(ids)
-        }
-    }
 }
 
 private struct SectionEndDropDelegate: DropDelegate {
@@ -823,7 +863,7 @@ private struct SectionEndDropDelegate: DropDelegate {
     let onDrop: @MainActor ([UUID], DropInsertion) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [.plainText])
+        dragState.isDragging
     }
 
     func dropEntered(info: DropInfo) {
@@ -852,48 +892,60 @@ private struct SectionEndDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        let ids = Array(dragState.draggingIDs)
         dragState.dropInsertion = nil
-        let providers = info.itemProviders(for: [.plainText])
-        guard let provider = providers.first else {
+        guard !ids.isEmpty else {
             dragState.clear()
             return false
         }
-        let sectionID = self.sectionID
-        let onDrop = self.onDrop
-        provider.loadObject(ofClass: NSString.self) { object, _ in
-            let text = (object as? NSString) as String? ?? ""
-            let ids = text.split(separator: ",").compactMap { UUID(uuidString: String($0)) }
-            Task { @MainActor in
-                onDrop(ids, .end(sectionID: sectionID))
-            }
-        }
+        onDrop(ids, .end(sectionID: sectionID))
         return true
+    }
+}
+
+/// Markdown parsing is not cheap and rows re-render on every selection / drag change,
+/// so parsed results are memoised by body text.
+@MainActor
+private enum MarkdownRenderCache {
+    private static var cache: [String: AttributedString] = [:]
+    private static var insertionOrder: [String] = []
+    private static let limit = 512
+
+    static func attributed(for text: String) -> AttributedString {
+        if let hit = cache[text] { return hit }
+
+        let parsed = (try? AttributedString(
+            markdown: text,
+            options: AttributedString.MarkdownParsingOptions(
+                interpretedSyntax: .inlineOnlyPreservingWhitespace
+            )
+        )) ?? AttributedString(text)
+
+        cache[text] = parsed
+        insertionOrder.append(text)
+        if insertionOrder.count > limit {
+            let evicted = insertionOrder.removeFirst()
+            cache.removeValue(forKey: evicted)
+        }
+        return parsed
     }
 }
 
 struct MarkdownBody: View {
     let text: String
     var isDone: Bool = false
+    var lineLimit: Int? = nil
 
     var body: some View {
-        Group {
-            if let attributed = try? AttributedString(
-                markdown: text,
-                options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .inlineOnlyPreservingWhitespace
-                )
-            ) {
-                Text(attributed)
-            } else {
-                Text(text)
-            }
-        }
+        Text(MarkdownRenderCache.attributed(for: text))
         .font(.system(size: 13))
         .strikethrough(isDone)
         .foregroundStyle(isDone ? .secondary : .primary)
         .frame(maxWidth: .infinity, alignment: .leading)
         .multilineTextAlignment(.leading)
         .lineSpacing(2)
+        .lineLimit(lineLimit)
+        .truncationMode(.tail)
         // Intentionally no textSelection — it steals clicks from multi-select.
     }
 }

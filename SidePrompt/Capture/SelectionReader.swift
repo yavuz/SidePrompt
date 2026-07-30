@@ -1,14 +1,41 @@
 import AppKit
 import ApplicationServices
 
+/// Plain text plus optional lossless RTF from the source app.
+struct CapturedSelection {
+    var plain: String
+    var rtf: Data?
+
+    var isEmpty: Bool {
+        plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 enum SelectionReader {
     /// Reads the current text selection from the frontmost app.
-    static func selectedText(excludingBundleID: String? = Bundle.main.bundleIdentifier) -> String? {
+    /// Prefers clipboard capture so RTF/HTML formatting is preserved.
+    static func captureSelection(excludingBundleID: String? = Bundle.main.bundleIdentifier) async -> CapturedSelection? {
+        // Synthesizing ⌘C into our own panel would just re-copy the list selection.
+        if !isFrontmost(bundleID: excludingBundleID),
+           let rich = await captureViaClipboardFallback(),
+           !rich.isEmpty {
+            return rich
+        }
         if let axText = selectedTextViaAccessibility(excludingBundleID: excludingBundleID),
            !axText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return axText
+            return CapturedSelection(plain: axText, rtf: nil)
         }
-        return selectedTextViaClipboardFallback()
+        return nil
+    }
+
+    /// Convenience when only plain/markdown text is needed.
+    static func selectedText(excludingBundleID: String? = Bundle.main.bundleIdentifier) async -> String? {
+        await captureSelection(excludingBundleID: excludingBundleID)?.plain
+    }
+
+    private static func isFrontmost(bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID
     }
 
     private static func selectedTextViaAccessibility(excludingBundleID: String?) -> String? {
@@ -80,7 +107,6 @@ enum SelectionReader {
         guard rangeResult == .success, let rangeValue else { return nil }
 
         var range = CFRange()
-        // AXValueRef holding CFRange
         let axValue = rangeValue as! AXValue
         guard AXValueGetValue(axValue, .cfRange, &range), range.length > 0 else { return nil }
 
@@ -95,8 +121,10 @@ enum SelectionReader {
         var value: AnyObject?
         let result = AXUIElementCopyAttributeValue(element, attribute, &value)
         guard result == .success else { return nil }
+        if let attributed = value as? NSAttributedString {
+            return attributed.string
+        }
         if let string = value as? String { return string }
-        if let attributed = value as? NSAttributedString { return attributed.string }
         return nil
     }
 
@@ -108,7 +136,9 @@ enum SelectionReader {
     }
 
     /// Fallback: synthesize ⌘C, wait for pasteboard change, then restore previous contents.
-    private static func selectedTextViaClipboardFallback() -> String? {
+    /// The wait is `await`, never `Thread.sleep` — blocking here freezes the UI and can
+    /// get our own event tap disabled by timeout.
+    private static func captureViaClipboardFallback() async -> CapturedSelection? {
         let pasteboard = NSPasteboard.general
         let previousChangeCount = pasteboard.changeCount
         let savedItems = snapshotPasteboard(pasteboard)
@@ -120,21 +150,71 @@ enum SelectionReader {
             if pasteboard.changeCount != previousChangeCount {
                 break
             }
-            Thread.sleep(forTimeInterval: 0.02)
+            try? await Task.sleep(for: .milliseconds(15))
+            if Task.isCancelled { break }
         }
 
-        guard pasteboard.changeCount != previousChangeCount,
-              let copied = pasteboard.string(forType: .string)?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-              !copied.isEmpty else {
+        guard pasteboard.changeCount != previousChangeCount else {
             restorePasteboard(pasteboard, items: savedItems)
             return nil
         }
 
-        // Keep the captured text on the pasteboard briefly is fine;
-        // restore previous clipboard so we don't clobber user history.
+        let captured = selectionFromPasteboard(pasteboard)
         restorePasteboard(pasteboard, items: savedItems)
-        return copied
+
+        guard let captured, !captured.isEmpty else { return nil }
+        return captured
+    }
+
+    /// Prefer original RTF bytes; fall back to HTML→RTF, then plain.
+    private static func selectionFromPasteboard(_ pasteboard: NSPasteboard) -> CapturedSelection? {
+        let plainFromBoard = pasteboard.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let rtf = pasteboard.data(forType: .rtf),
+           let attributed = NSAttributedString(rtf: rtf, documentAttributes: nil),
+           attributed.length > 0 {
+            let plain = plainFromBoard?.isEmpty == false ? plainFromBoard! : attributed.string
+            return CapturedSelection(plain: plain, rtf: rtf)
+        }
+
+        if let rtfd = pasteboard.data(forType: .rtfd),
+           let attributed = NSAttributedString(rtfd: rtfd, documentAttributes: nil),
+           attributed.length > 0,
+           let rtf = rtfData(from: attributed) {
+            let plain = plainFromBoard?.isEmpty == false ? plainFromBoard! : attributed.string
+            return CapturedSelection(plain: plain, rtf: rtf)
+        }
+
+        if let htmlData = pasteboard.data(forType: .html),
+           let attributed = NSAttributedString(html: htmlData, documentAttributes: nil),
+           attributed.length > 0,
+           let rtf = rtfData(from: attributed) {
+            let plain = plainFromBoard?.isEmpty == false ? plainFromBoard! : attributed.string
+            return CapturedSelection(plain: plain, rtf: rtf)
+        }
+
+        if let htmlString = pasteboard.string(forType: .html),
+           let attributed = NSAttributedString(html: Data(htmlString.utf8), documentAttributes: nil),
+           attributed.length > 0,
+           let rtf = rtfData(from: attributed) {
+            let plain = plainFromBoard?.isEmpty == false ? plainFromBoard! : attributed.string
+            return CapturedSelection(plain: plain, rtf: rtf)
+        }
+
+        if let plain = plainFromBoard, !plain.isEmpty {
+            return CapturedSelection(plain: plain, rtf: nil)
+        }
+        return nil
+    }
+
+    static func rtfData(from attributed: NSAttributedString) -> Data? {
+        let range = NSRange(location: 0, length: attributed.length)
+        guard range.length > 0 else { return nil }
+        return try? attributed.data(
+            from: range,
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+        )
     }
 
     private static func postCommandC() {

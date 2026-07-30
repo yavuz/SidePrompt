@@ -21,7 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.recheckPermissions(userInitiated: true)
         }
 
-        floatingPanel = FloatingPanelController(store: sharedStore, appModel: sharedAppModel)
+        floatingPanel = FloatingPanelController(
+            store: sharedStore,
+            appModel: sharedAppModel,
+            shortcuts: sharedShortcuts
+        )
+
+        ItemWindowManager.shared.configure(store: sharedStore, appModel: sharedAppModel)
+        sharedAppModel.onOpenItemWindow = { itemID in
+            ItemWindowManager.shared.open(itemID: itemID)
+        }
 
         keyRouter = KeyCommandRouter(store: sharedStore, appModel: sharedAppModel)
         keyRouter.onHidePanel = { [weak self] in
@@ -61,11 +70,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Writes are debounced — force anything still owed out to disk before we go.
+        sharedStore.flushPendingWrites()
         permissionPollTask?.cancel()
         hotKeys?.stop()
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
         }
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        sharedStore.flushPendingWrites()
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
@@ -217,12 +232,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            guard let text = SelectionReader.selectedText() else {
+            guard let selection = await SelectionReader.captureSelection() else {
                 sharedAppModel.showToast("Nothing selected")
                 return
             }
 
-            if sharedStore.capture(text) != nil {
+            if sharedStore.capture(selection) != nil {
                 sharedAppModel.showToast("Captured")
             }
         }

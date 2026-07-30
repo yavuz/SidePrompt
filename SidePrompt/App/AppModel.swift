@@ -11,6 +11,8 @@ final class AppModel {
 
     /// Set by AppDelegate to restart hotkeys after the user grants permission.
     var onRecheck: (() -> Void)?
+    /// Opens a dedicated window for editing a long item body.
+    var onOpenItemWindow: ((UUID) -> Void)?
 
     private var toastTask: Task<Void, Never>?
 

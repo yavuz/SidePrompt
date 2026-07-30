@@ -36,11 +36,29 @@ final class ShortcutSettings {
         }
     }
 
+    enum ItemActivateAction: String, CaseIterable, Identifiable, Codable {
+        case inlineEdit
+        case openWindow
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .inlineEdit: "Edit inline"
+            case .openWindow: "Open in window"
+            }
+        }
+    }
+
     var captureGesture: CaptureGesture {
         didSet { persist() }
     }
 
     var panelShortcut: PanelShortcut {
+        didSet { persist() }
+    }
+
+    var itemActivateAction: ItemActivateAction {
         didSet { persist() }
     }
 
@@ -54,19 +72,26 @@ final class ShortcutSettings {
            let decoded = try? JSONDecoder().decode(Stored.self, from: data) {
             captureGesture = decoded.captureGesture
             panelShortcut = decoded.panelShortcut
+            itemActivateAction = decoded.itemActivateAction ?? .inlineEdit
         } else {
             captureGesture = .doubleShift
             panelShortcut = .commandShiftP
+            itemActivateAction = .inlineEdit
         }
     }
 
     func reset() {
         captureGesture = .doubleShift
         panelShortcut = .commandShiftP
+        itemActivateAction = .inlineEdit
     }
 
     private func persist() {
-        let stored = Stored(captureGesture: captureGesture, panelShortcut: panelShortcut)
+        let stored = Stored(
+            captureGesture: captureGesture,
+            panelShortcut: panelShortcut,
+            itemActivateAction: itemActivateAction
+        )
         if let data = try? JSONEncoder().encode(stored) {
             defaults.set(data, forKey: key)
         }
@@ -76,5 +101,12 @@ final class ShortcutSettings {
     private struct Stored: Codable {
         var captureGesture: CaptureGesture
         var panelShortcut: PanelShortcut
+        var itemActivateAction: ItemActivateAction?
+
+        enum CodingKeys: String, CodingKey {
+            case captureGesture
+            case panelShortcut
+            case itemActivateAction
+        }
     }
 }

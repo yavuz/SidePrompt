@@ -24,9 +24,8 @@ struct PanelRootView: View {
                 }
                 .overlay {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.55), lineWidth: 0.8)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.22), radius: 28, y: 14)
         }
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }

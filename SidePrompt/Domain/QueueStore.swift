@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Observation
 
 @MainActor
@@ -15,16 +16,36 @@ final class QueueStore {
     var selectionAnchorID: UUID?
     /// When set, ⌘C should go to the text editor instead of copying list items.
     var editingItemID: UUID?
+    /// Bumped only when item membership / ordering changes, so views can drive
+    /// layout animations without rebuilding an O(items) signature every render.
+    private(set) var layoutVersion: Int = 0
 
     func endEditing() {
         guard editingItemID != nil else { return }
         editingItemID = nil
     }
 
+    func clearSelection() {
+        selectedItemIDs = []
+        selectionAnchorID = nil
+    }
+
     private let persistence: LocalStore
+    private let writer: StoreWriter
+
+    /// Debounced write state. `pendingSnapshot` is non-nil while a write is owed.
+    private var saveTask: Task<Void, Never>?
+    private var pendingSnapshot: AppStoreData?
+    /// Rich-text edits buffered during typing; converted to markdown/RTF on commit.
+    private var pendingRichEdits: [UUID: NSAttributedString] = [:]
+    private var richCommitTask: Task<Void, Never>?
+
+    private static let saveDebounce: Duration = .milliseconds(400)
+    private static let richEditDebounce: Duration = .milliseconds(350)
 
     init(persistence: LocalStore = LocalStore()) {
         self.persistence = persistence
+        self.writer = persistence.makeWriter()
         load()
     }
 
@@ -40,6 +61,19 @@ final class QueueStore {
         filteredItems
             .filter { $0.sectionId == section.id }
             .sorted { $0.order < $1.order }
+    }
+
+    /// One pass over `filteredItems` instead of a filter+sort per section.
+    /// Callers rendering every section must use this, not `items(in:)` in a loop.
+    func groupedItems() -> [UUID: [PromptItem]] {
+        var grouped: [UUID: [PromptItem]] = [:]
+        for item in filteredItems {
+            grouped[item.sectionId, default: []].append(item)
+        }
+        for key in grouped.keys {
+            grouped[key]?.sort { $0.order < $1.order }
+        }
+        return grouped
     }
 
     var filteredItems: [PromptItem] {
@@ -63,19 +97,44 @@ final class QueueStore {
             templates = fallback.templates
             lastError = error.localizedDescription
         }
+        bumpLayoutVersion()
     }
 
     @discardableResult
     func capture(_ text: String, kind: ItemKind = .note) -> PromptItem? {
-        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return nil }
+        capture(CapturedSelection(plain: text, rtf: nil), kind: kind)
+    }
+
+    @discardableResult
+    func capture(_ selection: CapturedSelection, kind: ItemKind = .note) -> PromptItem? {
+        let plain = selection.plain.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !plain.isEmpty else { return nil }
         ensureInbox()
         guard let inbox = sections.first(where: { $0.title == "Inbox" }) ?? sections.first else {
             return nil
         }
         let order = (items.filter { $0.sectionId == inbox.id }.map(\.order).max() ?? -1) + 1
-        let item = PromptItem(sectionId: inbox.id, body: body, kind: kind, order: order)
+
+        // Keep markdown in `body` for list rendering; keep original RTF for lossless copy.
+        let body: String
+        if let rtf = selection.rtf,
+           let attributed = NSAttributedString(rtf: rtf, documentAttributes: nil),
+           attributed.length > 0 {
+            let markdown = RichTextMarkdown.markdown(from: attributed)
+            body = markdown.isEmpty ? plain : markdown
+        } else {
+            body = plain
+        }
+
+        let item = PromptItem(
+            sectionId: inbox.id,
+            body: body,
+            bodyRTF: selection.rtf,
+            kind: kind,
+            order: order
+        )
         items.append(item)
+        bumpLayoutVersion()
         save()
         return item
     }
@@ -86,15 +145,56 @@ final class QueueStore {
         items.append(item)
         selectedItemIDs = [item.id]
         selectionAnchorID = item.id
+        bumpLayoutVersion()
         save()
         return item
     }
 
     func updateBody(id: UUID, body: String) {
+        pendingRichEdits.removeValue(forKey: id)
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        guard items[index].body != body || items[index].bodyRTF != nil else { return }
         items[index].body = body
+        items[index].bodyRTF = nil
         items[index].updatedAt = Date()
         save()
+    }
+
+    /// Buffers the edit and commits it after a pause. Markdown + RTF conversion and
+    /// the disk write are O(document), so they must not run on every keystroke.
+    func updateBody(id: UUID, attributed: NSAttributedString) {
+        guard items.contains(where: { $0.id == id }) else { return }
+        pendingRichEdits[id] = attributed
+        richCommitTask?.cancel()
+        richCommitTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.richEditDebounce)
+            guard !Task.isCancelled else { return }
+            self?.commitPendingRichEdits()
+        }
+    }
+
+    /// Applies buffered rich-text edits immediately. Call before closing an editor.
+    func commitPendingRichEdits() {
+        richCommitTask?.cancel()
+        richCommitTask = nil
+        guard !pendingRichEdits.isEmpty else { return }
+        let edits = pendingRichEdits
+        pendingRichEdits = [:]
+
+        var changed = false
+        let now = Date()
+        for (id, attributed) in edits {
+            guard let index = items.firstIndex(where: { $0.id == id }) else { continue }
+            let markdown = RichTextMarkdown.markdown(from: attributed)
+            let body = markdown.isEmpty ? attributed.string : markdown
+            let rtf = SelectionReader.rtfData(from: attributed)
+            guard items[index].body != body || items[index].bodyRTF != rtf else { continue }
+            items[index].body = body
+            items[index].bodyRTF = rtf
+            items[index].updatedAt = now
+            changed = true
+        }
+        if changed { save() }
     }
 
     func toggleDone(id: UUID) {
@@ -105,8 +205,10 @@ final class QueueStore {
     }
 
     func delete(ids: Set<UUID>) {
+        for id in ids { pendingRichEdits.removeValue(forKey: id) }
         items.removeAll { ids.contains($0.id) }
         selectedItemIDs.subtract(ids)
+        bumpLayoutVersion()
         save()
     }
 
@@ -115,6 +217,7 @@ final class QueueStore {
         guard !trimmed.isEmpty else { return }
         let order = (sections.map(\.order).max() ?? -1) + 1
         sections.append(SectionModel(title: trimmed, order: order))
+        bumpLayoutVersion()
         save()
     }
 
@@ -150,6 +253,7 @@ final class QueueStore {
             guard let index = sections.firstIndex(where: { $0.id == section.id }) else { continue }
             sections[index].order = order
         }
+        bumpLayoutVersion()
         save()
         return movingIDs.count
     }
@@ -195,6 +299,7 @@ final class QueueStore {
         selectedItemIDs = Set(uniqueIDs)
         selectionAnchorID = uniqueIDs.first
         editingItemID = nil
+        bumpLayoutVersion()
         save()
     }
 
@@ -252,13 +357,21 @@ final class QueueStore {
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
         let removeIDs = Set(selected.dropFirst().map(\.id))
+        guard items.contains(where: { $0.id == first.id }) else { return nil }
+
+        for id in removeIDs { pendingRichEdits.removeValue(forKey: id) }
+        pendingRichEdits.removeValue(forKey: first.id)
+        items.removeAll { removeIDs.contains($0.id) }
+
+        // Re-find after the removal — the earlier index is stale once elements shift.
         guard let index = items.firstIndex(where: { $0.id == first.id }) else { return nil }
         items[index].body = mergedBody
+        items[index].bodyRTF = nil
         items[index].updatedAt = Date()
         items[index].isDone = false
-        items.removeAll { removeIDs.contains($0.id) }
         selectedItemIDs = [first.id]
         editingItemID = nil
+        bumpLayoutVersion()
         save()
         return items[index]
     }
@@ -312,6 +425,11 @@ final class QueueStore {
                 let rightSection = sections.first(where: { $0.id == rhs.sectionId })?.order ?? 0
                 return leftSection < rightSection
             }
+    }
+
+    /// Public for clipboard paths that need RTF-aware copy.
+    func orderedSelectedItemsForCopy() -> [PromptItem] {
+        orderedSelectedItems()
     }
 
     private func orderedSelectedBodies() -> [String] {
@@ -380,12 +498,43 @@ final class QueueStore {
         }
     }
 
+    /// Coalesces rapid mutations into one background write.
     private func save() {
+        let snapshot = AppStoreData(sections: sections, items: items, templates: templates)
+        pendingSnapshot = snapshot
+        saveTask?.cancel()
+        let writer = self.writer
+        saveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.saveDebounce)
+            guard !Task.isCancelled else { return }
+            do {
+                try await writer.write(snapshot)
+                guard let self, !Task.isCancelled else { return }
+                self.pendingSnapshot = nil
+                // Assign only on change — @Observable fires on every write.
+                if self.lastError != nil { self.lastError = nil }
+            } catch {
+                self?.lastError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Writes any owed state synchronously. For app termination and window close.
+    func flushPendingWrites() {
+        commitPendingRichEdits()
+        saveTask?.cancel()
+        saveTask = nil
+        guard let snapshot = pendingSnapshot else { return }
+        pendingSnapshot = nil
         do {
-            try persistence.save(AppStoreData(sections: sections, items: items, templates: templates))
-            lastError = nil
+            try persistence.save(snapshot)
+            if lastError != nil { lastError = nil }
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    private func bumpLayoutVersion() {
+        layoutVersion &+= 1
     }
 }

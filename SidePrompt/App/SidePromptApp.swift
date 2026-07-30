@@ -44,6 +44,17 @@ struct SettingsView: View {
                 }
             }
 
+            Section("Items") {
+                Picker("Double-click item", selection: $shortcuts.itemActivateAction) {
+                    ForEach(ShortcutSettings.ItemActivateAction.allCases) { action in
+                        Text(action.label).tag(action)
+                    }
+                }
+                Text("Single-click selects. Double-click opens with the action above. ⌘-click multi-selects; Shift-click selects a range.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("In-panel keys") {
                 LabeledContent("Copy selected", value: "⌘C")
                 LabeledContent("Copy as list", value: "⌘⇧C")
@@ -73,12 +84,6 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("Selection") {
-                Text("Click to edit. ⌘-click to multi-select. Shift-click for a range.")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-            }
-
             Section("Privacy") {
                 Text("Notes stay in a local file on your Mac. Nothing syncs.")
                     .foregroundStyle(.secondary)
@@ -88,6 +93,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 520)
+        .frame(width: 480, height: 560)
     }
 }
