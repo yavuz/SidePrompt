@@ -16,6 +16,7 @@ struct SidePromptApp: App {
                 .environment(appDelegate.sharedStore)
                 .environment(appDelegate.sharedAppModel)
                 .environment(appDelegate.sharedShortcuts)
+                .environment(appDelegate.sharedLaunchAtLogin)
         }
     }
 }
@@ -23,11 +24,41 @@ struct SidePromptApp: App {
 struct SettingsView: View {
     @Environment(QueueStore.self) private var store
     @Environment(ShortcutSettings.self) private var shortcuts
+    @Environment(LaunchAtLogin.self) private var launchAtLogin
 
     var body: some View {
         @Bindable var shortcuts = shortcuts
 
         Form {
+            Section("General") {
+                Toggle("Launch at login", isOn: Binding(
+                    get: { launchAtLogin.isEnabled },
+                    set: { launchAtLogin.setEnabled($0) }
+                ))
+
+                if launchAtLogin.needsApproval {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Turned off in System Settings — approve SidePrompt under Login Items.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open") { launchAtLogin.openSystemSettings() }
+                    }
+                }
+
+                if let error = launchAtLogin.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+
+                if !launchAtLogin.isInApplicationsFolder {
+                    Text("Move SidePrompt to /Applications first — login items point at a fixed path, and this copy is somewhere else.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             Section("Shortcuts") {
                 Picker("Capture selection", selection: $shortcuts.captureGesture) {
                     ForEach(ShortcutSettings.CaptureGesture.allCases) { gesture in

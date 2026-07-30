@@ -28,6 +28,7 @@
 		C67541D93623629DBA8E5039 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B495E67AD146716DFC0119AB /* AppDelegate.swift */; };
 		C9B0E15351A34E4765349E82 /* FloatingPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F2F64FD1559FF9B9BA84478 /* FloatingPanelController.swift */; };
 		E374A9C6F7530C6AE52AEFD9 /* KeyCommandRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D333302D818EA67219B487B5 /* KeyCommandRouter.swift */; };
+		ECB59EC583B8D805156E5C92 /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFF689B955115433376CDED /* LaunchAtLogin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +43,7 @@
 		6711AF612792C589B61EEC49 /* SidePrompt.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SidePrompt.entitlements; sourceTree = "<group>"; };
 		69B72366B259F2D49D3283A1 /* PanelRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelRootView.swift; sourceTree = "<group>"; };
 		6D38ADA7FA4EB9454C49CF62 /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
+		7EFF689B955115433376CDED /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		83C60892364F748AF5088232 /* SidePromptApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePromptApp.swift; sourceTree = "<group>"; };
 		872E86655AF123B0A8EA1303 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		937DFD52179FD812E8B04843 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 			children = (
 				B495E67AD146716DFC0119AB /* AppDelegate.swift */,
 				B0FAEB7B5D7440ABFD90DD34 /* AppModel.swift */,
+				7EFF689B955115433376CDED /* LaunchAtLogin.swift */,
 				83C60892364F748AF5088232 /* SidePromptApp.swift */,
 				1CD8C12A905DC273218E80D9 /* UpdateManager.swift */,
 			);
@@ -242,6 +245,7 @@
 				2F4CF4C93E07F13409B57039 /* HotKeyManager.swift in Sources */,
 				A4F549DA77E0AE19AA50CA53 /* ItemDetailWindow.swift in Sources */,
 				E374A9C6F7530C6AE52AEFD9 /* KeyCommandRouter.swift in Sources */,
+				ECB59EC583B8D805156E5C92 /* LaunchAtLogin.swift in Sources */,
 				2898B9247D3499A4D5011888 /* LocalStore.swift in Sources */,
 				3C14C4DC8CC930DB855C6B1C /* Models.swift in Sources */,
 				5826DD011542D4BB1CB95F77 /* PanelRootView.swift in Sources */,

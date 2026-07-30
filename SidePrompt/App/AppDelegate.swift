@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let sharedStore = QueueStore()
     let sharedAppModel = AppModel()
     let sharedShortcuts = ShortcutSettings()
+    let sharedLaunchAtLogin = LaunchAtLogin()
 
     private var hotKeys: HotKeyManager!
     private var keyRouter: KeyCommandRouter!
@@ -85,13 +86,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         recheckPermissions(userInitiated: false)
+        // The user may have flipped it in System Settings while we were away.
+        sharedLaunchAtLogin.refresh()
     }
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             let image = NSImage(
-                systemSymbolName: "text.badge.plus",
+                systemSymbolName: "square.stack",
                 accessibilityDescription: "SidePrompt"
             )
             image?.isTemplate = true
@@ -119,6 +122,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Show SidePrompt", action: #selector(showPanel), keyEquivalent: "")
         menu.addItem(withTitle: "Capture Selection", action: #selector(captureFromMenu), keyEquivalent: "")
         menu.addItem(.separator())
+
+        sharedLaunchAtLogin.refresh()
+        let launchItem = NSMenuItem(
+            title: "Launch at Login",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchItem.state = sharedLaunchAtLogin.isEnabled ? .on : .off
+        menu.addItem(launchItem)
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(.separator())
@@ -133,6 +146,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func captureFromMenu() {
         performCapture(delay: 0)
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        sharedLaunchAtLogin.toggle()
+        if let error = sharedLaunchAtLogin.lastError {
+            sharedAppModel.showToast(error)
+        } else if sharedLaunchAtLogin.needsApproval {
+            sharedAppModel.showToast("Approve SidePrompt in Login Items")
+            sharedLaunchAtLogin.openSystemSettings()
+        } else {
+            sharedAppModel.showToast(
+                sharedLaunchAtLogin.isEnabled ? "Launches at login" : "Won't launch at login"
+            )
+        }
     }
 
     @objc private func checkForUpdates() {
